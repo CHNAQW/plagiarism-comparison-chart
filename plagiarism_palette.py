@@ -6,11 +6,25 @@ from difflib import SequenceMatcher
 HIGHLIGHT_COLOR = "#ffe66d"
 
 
+TOKEN_PATTERN = re.compile(
+    r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]|"  # CJK unified ideographs
+    r"[A-Za-z0-9_]+(?:[\'’\-][A-Za-z0-9_]+)*|"            # Latin words / numbers
+    r"[^\s]"                                                   # Other visible symbols
+)
+
+
 def tokenize_with_spans(text: str):
     tokens = []
-    for m in re.finditer(r"\S+", text):
+    for m in TOKEN_PATTERN.finditer(text):
         tokens.append((m.group(0), m.start(), m.end()))
     return tokens
+
+
+def infer_min_tokens(left_text: str, right_text: str, default: int = 2) -> int:
+    # Chinese text typically has no spaces, so tokenization is character-level.
+    # Use a slightly higher threshold to reduce accidental single short overlaps.
+    has_cjk = bool(re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]", left_text + right_text))
+    return 4 if has_cjk else default
 
 
 def index_to_tk(text: str, char_index: int) -> str:
@@ -24,9 +38,12 @@ def clear_tags(widget: tk.Text):
     widget.tag_remove("match", "1.0", tk.END)
 
 
-def highlight_matches(left_widget: tk.Text, right_widget: tk.Text, min_tokens: int = 2):
+def highlight_matches(left_widget: tk.Text, right_widget: tk.Text, min_tokens: int | None = None):
     left_text = left_widget.get("1.0", tk.END).rstrip("\n")
     right_text = right_widget.get("1.0", tk.END).rstrip("\n")
+
+    if min_tokens is None:
+        min_tokens = infer_min_tokens(left_text, right_text)
 
     clear_tags(left_widget)
     clear_tags(right_widget)
